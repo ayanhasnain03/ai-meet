@@ -63,8 +63,22 @@ export const SignInView = () => {
     );
   };
 
-  const handleOAuth = (provider: "google" | "github") => {
-    console.log(`Signing in with ${provider}`);
+  const onSocial = (provider: "google" | "github") => {
+    setError(null);
+    setPending(true);
+    authClient.signIn.social(
+      {
+        provider,
+        callbackURL: "/",
+      },
+      {
+        onSuccess: () => setPending(false),
+        onError: ({ error }) => {
+          setError(error.message);
+          setPending(false);
+        },
+      }
+    );
   };
 
   return (
@@ -139,7 +153,8 @@ export const SignInView = () => {
                   type="button"
                   variant="outline"
                   className="w-full flex items-center justify-center gap-2"
-                  onClick={() => handleOAuth("google")}
+                  disabled={pending}
+                  onClick={() => onSocial("google")}
                 >
                   <svg
                     className="h-4 w-4"
@@ -155,8 +170,9 @@ export const SignInView = () => {
                 <Button
                   type="button"
                   variant="outline"
+                  disabled={pending}
                   className="w-full flex items-center justify-center gap-2"
-                  onClick={() => handleOAuth("github")}
+                  onClick={() => onSocial("github")}
                 >
                   <Github className="w-4 h-4" />
                   GitHub
