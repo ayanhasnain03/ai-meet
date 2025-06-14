@@ -4,11 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
 import {
   Form,
   FormControl,
@@ -22,65 +20,78 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { OctagonAlertIcon, Github } from "lucide-react";
-
 import { authClient } from "@/lib/auth-client";
 
-const formSchema = z.object({
-name:z.string().min(1,{message:"Name is required"}),
-  email: z.string().email(),
-  password: z.string().min(1, { message: "Password is required" }),
-  confirmPassword:z.string().min(1,{message:"password is required"})
-}).refine((data)=>data.password === data.confirmPassword,{
-    message: "Password don't match",
-    path:["confirmPassword"]
-});
+const formSchema = z
+  .object({
+    name: z.string().min(1, { message: "Name is required" }),
+    email: z.string().email({ message: "Invalid email address" }),
+    password: z.string().min(1, { message: "Password is required" }),
+    confirmPassword: z.string().min(1, { message: "Confirm your password" }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 export const SignUpView = () => {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-const [pending, setPending] = useState<boolean>(false)
+  const [pending, setPending] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-        name:"",
+      name: "",
       email: "",
       password: "",
-      confirmPassword:""
+      confirmPassword: "",
     },
   });
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     setError(null);
     setPending(true);
+
     authClient.signUp.email(
       {
-        name:data.name,
+        name: data.name,
         email: data.email,
         password: data.password,
       },
       {
-        onSuccess: () =>{
+        onSuccess: () => {
           router.push("/");
-          setPending(false)
         },
         onError: ({ error }) => {
           setError(error.message);
-          setPending(false)
         },
-      },
-
+        onSettled: () => setPending(false),
+      }
     );
   };
 
-  const handleOAuth = (provider: "google" | "github") => {
-    console.log(`Signing in with ${provider}`);
-
+  const onSocial = (provider: "google" | "github") => {
+    setError(null);
+    setPending(true);
+    authClient.signIn.social(
+      {
+        provider,
+        callbackURL: "/",
+      },
+      {
+        onSuccess: () => setPending(false),
+        onError: ({ error }) => {
+          setError(error.message);
+          setPending(false);
+        },
+      }
+    );
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted px-4 py-8">
       <Card className="w-full max-w-4xl overflow-hidden border-none shadow-2xl md:grid md:grid-cols-2">
-
         <div className="p-6 md:p-10 space-y-6 bg-background">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -90,75 +101,43 @@ const [pending, setPending] = useState<boolean>(false)
               </div>
 
               <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="text"
-                          placeholder="John Doe"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="email"
-                          placeholder="xyz@gmail.com"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="*********"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm password</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="*********"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {["name", "email", "password", "confirmPassword"].map(
+                  (fieldName) => (
+                    <FormField
+                      key={fieldName}
+                      control={form.control}
+                      name={fieldName as keyof z.infer<typeof formSchema>}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            {field.name === "confirmPassword"
+                              ? "Confirm Password"
+                              : field.name.charAt(0).toUpperCase() +
+                                field.name.slice(1)}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type={
+                                field.name.includes("password")
+                                  ? "password"
+                                  : "text"
+                              }
+                              placeholder={
+                                field.name === "email"
+                                  ? "xyz@gmail.com"
+                                  : field.name === "name"
+                                  ? "John Doe"
+                                  : "*********"
+                              }
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )
+                )}
               </div>
 
               {error && (
@@ -169,9 +148,8 @@ const [pending, setPending] = useState<boolean>(false)
               )}
 
               <Button type="submit" disabled={pending} className="w-full">
-                Sign in
+                {pending ? "Signing up..." : "Sign Up"}
               </Button>
-
 
               <div className="relative flex items-center justify-center">
                 <span className="absolute inset-x-0 h-px bg-border top-1/2" />
@@ -185,8 +163,9 @@ const [pending, setPending] = useState<boolean>(false)
                   type="button"
                   variant="outline"
                   className="w-full flex items-center justify-center gap-2"
-                  onClick={() => handleOAuth("google")}
+                  onClick={() => onSocial("google")}
                 >
+                  {/* Google Icon */}
                   <svg
                     className="h-4 w-4"
                     viewBox="0 0 488 512"
@@ -202,7 +181,7 @@ const [pending, setPending] = useState<boolean>(false)
                   type="button"
                   variant="outline"
                   className="w-full flex items-center justify-center gap-2"
-                  onClick={() => handleOAuth("github")}
+                  onClick={() => onSocial("github")}
                 >
                   <Github className="w-4 h-4" />
                   GitHub
@@ -221,7 +200,6 @@ const [pending, setPending] = useState<boolean>(false)
             </form>
           </Form>
         </div>
-
 
         <div className="bg-gradient-to-br from-green-700 to-green-900 hidden md:flex flex-col items-center justify-center text-white px-6 py-10 gap-4">
           <Image
