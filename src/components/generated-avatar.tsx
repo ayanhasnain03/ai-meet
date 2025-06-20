@@ -26,7 +26,7 @@ export const GeneratedAvatar = ({
   }, [seed, variant]);
 
   return (
-    <Avatar className="w-10 h-10">
+    <Avatar className={`${className ? className : "w-10 h-10"} `}>
       <AvatarImage src={avatar.toDataUri()} alt="Generated Avatar" />
       <AvatarFallback>{seed.slice(0, 2)}</AvatarFallback>
     </Avatar>
