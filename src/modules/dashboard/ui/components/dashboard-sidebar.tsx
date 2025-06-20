@@ -35,14 +35,7 @@ const DashboardSidebar = () => {
           href="/"
           className="flex items-center gap-3 p-4 hover:opacity-80 transition-opacity"
         >
-          <Image
-            src="/logo.svg"
-            alt="Meet.AI logo"
-            width={42}
-            height={42}
-            className="h-[42px] w-[42px] drop-shadow-lg"
-          />
-          <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+          <span className="text-xl font-bold bg-gradient-to-r from-green-200 to-green-400 bg-clip-text text-transparent">
             Meet.AI
           </span>
         </Link>
