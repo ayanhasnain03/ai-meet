@@ -1,13 +1,46 @@
 import { db } from "@/db";
-import {meetings } from "@/db/schema";
+import { meetings } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 
-import {  z } from "zod";
+import { z } from "zod";
 import { and, count, desc, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/constants";
 import { TRPCError } from "@trpc/server";
+import { meetingsInsertSchema, meetingsUpdateSchema } from "../schema";
 export const meetingsRouter = createTRPCRouter({
+  update: protectedProcedure
+    .input(meetingsUpdateSchema)
+    .mutation(async ({ input, ctx }) => {
+      const { id, ...data } = input;
 
+      const [updatedMeeting] = await db
+        .update(meetings)
+        .set(data)
+        .where(and(eq(meetings.id, id), eq(meetings.userId, ctx.auth.user.id)))
+        .returning();
+
+      if (!updatedMeeting) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "meeting not found or you don't have permission",
+        });
+      }
+
+      return updatedMeeting;
+    }),
+  create: protectedProcedure
+    .input(meetingsInsertSchema)
+    .mutation(async ({ input, ctx }) => {
+      const [createdMeeting] = await db
+        .insert(meetings)
+        .values({
+          ...input,
+          userId: ctx.auth.user.id,
+        })
+        .returning();
+      //TODO: Create Stream call , Upsert stream call
+      return createdMeeting;
+    }),
   getOne: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
@@ -20,7 +53,10 @@ export const meetingsRouter = createTRPCRouter({
           and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id))
         );
       if (!existingMeeting) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "meeting not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "meeting not found",
+        });
       }
       return existingMeeting;
     }),
