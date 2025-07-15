@@ -3,13 +3,13 @@ import Image from "next/image";
 interface Props {
   title: string;
   description: string;
-  iconUrl?: string;
+  imageUrl?: string;
 }
 
 export const EmptyState = ({
   title,
   description,
-  iconUrl = "/empty.svg",
+  imageUrl = "/empty.svg",
 }: Props) => {
   return (
     <div
@@ -17,7 +17,7 @@ export const EmptyState = ({
 "
     >
       <Image
-        src={iconUrl}
+        src={imageUrl}
         alt="Empty State"
         height={200}
         width={400}
