@@ -1,11 +1,11 @@
 import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  // CallEndedEvent,
-  // CallTranscriptionReadyEvent,
-  // CallRecordingReadyEvent,
+  CallEndedEvent,
+  CallRecordingReadyEvent,
   CallSessionParticipantLeftEvent,
   CallSessionStartedEvent,
+  CallTranscriptionReadyEvent,
 } from "@stream-io/node-sdk";
 
 import { db } from "@/db";
@@ -125,6 +125,45 @@ export async function POST(req: NextRequest) {
     }
     const call = streamVIdeo.video.call("default", meetingId);
     await call.end();
+  } else if (eventType === "call.session_ended") {
+    const event = payload as CallEndedEvent;
+    const meetingId = event.call.custom?.meetingId;
+    if (!meetingId) {
+      return NextResponse.json(
+        {
+          error: "Missing meetingId",
+        },
+        { status: 400 }
+      );
+    }
+    await db
+      .update(meetings)
+      .set({
+        status: "processing",
+        endedAt: new Date(),
+      })
+      .where(and(eq(meetings.id, meetingId), eq(meetings.status, "active")));
+  } else if (eventType === "call.transcription_ready") {
+    const event = payload as CallTranscriptionReadyEvent;
+    const meetingId = event.call_cid.split(":")[1];
+    const [updatedMeeting] = await db
+      .update(meetings)
+      .set({ transcriptUrl: event.call_transcription.url })
+      .where(eq(meetings.id, meetingId))
+      .returning();
+
+    if (!updatedMeeting) {
+      return NextResponse.json({ error: "Missing meetingId" }, { status: 404 });
+    }
+
+    //Todo: call Ingest backgroudn job to summarize the transript
+  } else if (eventType === "call.recording_ready") {
+    const event = payload as CallRecordingReadyEvent;
+    const meetingId = event.call_cid.split(":")[1];
+    await db
+      .update(meetings)
+      .set({ recordingUrl: event.call_recording.url })
+      .where(eq(meetings.id, meetingId))
   }
 
   return NextResponse.json({ status: "ok" });
