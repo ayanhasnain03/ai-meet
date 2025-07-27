@@ -5,10 +5,11 @@ import { db } from "@/db";
 import { agents, meetings, user } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
+
 const summarizer = createAgent({
   name: "summarizer",
-  system:
-    `You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
+  system: `
+You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
 
 Use the following markdown structure for every output:
 
@@ -27,76 +28,85 @@ Example:
 #### Next Section
 - Feature X automatically does Y
 - Mention of integration with Z
-`.trim(),
+  `.trim(),
   model: openai({ model: "gpt-4o", apiKey: process.env.OPENAI_API_KEY }),
 });
+
 export const meetingProcessing = inngest.createFunction(
   { id: "meetings/processing" },
   { event: "meetings/processing" },
   async ({ event, step }) => {
-    const response = await step.run("fetch-transcript", async () => {
-      return await fetch(event.data.transcriptUrl).then((res) => res.text());
+    const { meetingId, transcriptUrl } = event.data;
+
+    console.log("➡️ Event received", { transcriptUrl, meetingId });
+
+    const rawTranscript = await step.run("fetch-transcript", async () => {
+      const res = await fetch(transcriptUrl);
+      const text = await res.text();
+      console.log("✅ Transcript fetched. Sample:", text.slice(0, 300));
+      return text;
     });
+
     const transcript = await step.run("parse-transcript", async () => {
-      return JSONL.parse<StreamTranscriptItem>(response);
+      const parsed = JSONL.parse<StreamTranscriptItem>(rawTranscript);
+      console.log("✅ Transcript parsed. First items:", parsed.slice(0, 2));
+      return parsed;
     });
 
     const transcriptWithSpeaker = await step.run("add-speakers", async () => {
       const speakerIds = [
         ...new Set(transcript.map((item) => item.speaker_id)),
       ];
+      console.log("👥 Unique speaker IDs:", speakerIds);
 
       const userSpeakers = await db
         .select()
         .from(user)
-        .where(inArray(user.id, speakerIds))
-        .then((users) => {
-          return users.map((user) => ({
-            ...user,
-          }));
-        });
-      const agentsSpeakers = await db
+        .where(inArray(user.id, speakerIds));
+      const agentSpeakers = await db
         .select()
         .from(agents)
-        .where(inArray(agents.id, speakerIds))
-        .then((agents) => {
-          return agents.map((agent) => ({
-            ...agent,
-          }));
-        });
-      const speakers = [...userSpeakers, ...agentsSpeakers];
-      return transcript.map((item) => {
-        const speaker = speakers.find(
-          (speaker) => speaker.id === item.speaker_id
-        );
-        if (!speaker) {
-          return {
-            ...item,
-            user: {
-              name: "Unknown",
-            },
-          };
-        }
+        .where(inArray(agents.id, speakerIds));
+      const speakers = [...userSpeakers, ...agentSpeakers];
+
+      const enriched = transcript.map((item) => {
+        const speaker = speakers.find((s) => s.id === item.speaker_id);
         return {
           ...item,
           user: {
-            name: speaker.name,
+            name: speaker?.name || "Unknown",
           },
         };
       });
+
+      console.log("✅ Transcript with speakers:", enriched.slice(0, 2));
+      return enriched;
     });
+
     const { output } = await summarizer.run(
       "Summarize the following meeting transcript: " +
         JSON.stringify(transcriptWithSpeaker)
     );
+
+    console.log("🧠 Summarizer output:", output);
+
+    const content = (output[0] as TextMessage).content;
+    const summary = typeof content === "string" ? content.trim() : "";
+
     await step.run("save-summary", async () => {
+      console.log("💾 Saving summary:", summary.slice(0, 300));
+
       await db
         .update(meetings)
         .set({
-          summary: (output[0] as TextMessage).content as string,
+          summary,
           status: "completed",
         })
-        .where(eq(meetings.id, event.data.meetingId));
+        .where(eq(meetings.id, meetingId));
+
+      console.log("✅ Summary saved to DB.");
     });
+
+    console.log("✅ Meeting processing completed successfully.");
   }
 );
